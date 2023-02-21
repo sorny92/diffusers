@@ -26,7 +26,7 @@ from diffusers import DDPMPipeline, DDPMScheduler, UNet2DModel
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, is_accelerate_version, is_tensorboard_available, is_wandb_available
-from diffusers.utils.import_utils import is_xformers_available
+from diffusers.utils.import_utils import is_xformers_available, is_wandb_available
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -469,7 +469,7 @@ def main(args):
             transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
             transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
             transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
+            # transforms.Normalize([0.5], [0.5]),
         ]
     )
 
@@ -668,6 +668,7 @@ def main(args):
                     ema_model.restore(unet.parameters())
 
                 # denormalize the images and save to tensorboard
+<<<<<<< HEAD
                 images_processed = (images * 255).round().astype("uint8")
 
                 if args.logger == "tensorboard":
@@ -681,7 +682,22 @@ def main(args):
                     accelerator.get_tracker("wandb").log(
                         {"test_samples": [wandb.Image(img) for img in images_processed], "epoch": epoch},
                         step=global_step,
+=======
+                if args.logger == "tensorboard" and is_tensorboard_available():
+                    images_processed = (images * 255).round().astype("uint8")
+                    accelerator.get_tracker("tensorboard").add_images(
+                        "test_samples", images_processed.transpose(0, 3, 1, 2), epoch
+>>>>>>> e477395d (some wip tweaks)
                     )
+                if args.logger == "wandb" and is_wandb_available():
+                    import wandb
+                    accelerator.get_tracker("wandb").log({
+                        "test_samples": [
+                            wandb.Image(images[i, :, :, :].transpose(1, 2, 0))
+                            for i in range(images.shape[0])
+                        ]
+                    })
+                    
 
             if epoch % args.save_model_epochs == 0 or epoch == args.num_epochs - 1:
                 # save the model
