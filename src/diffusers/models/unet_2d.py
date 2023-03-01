@@ -82,6 +82,8 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         num_class_embeds (`int`, *optional*, defaults to `None`):
             Input dimension of the learnable embedding matrix to be projected to `time_embed_dim` when performing class
             conditioning with `class_embed_type` equal to `None`.
+        convnext_channels_mult (`int`, *optional*, defaults to 4):
+            Dimension multiplier between output channels and middel channels in ConvNeXt blocks.
     """
 
     @register_to_config
@@ -107,6 +109,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         norm_num_groups: int = 32,
         norm_eps: float = 1e-5,
         resnet_time_scale_shift: str = "default",
+        convnext_channels_mult=4,
         add_attention: bool = True,
         class_embed_type: Optional[str] = None,
         num_class_embeds: Optional[int] = None,
@@ -175,6 +178,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 downsample_padding=downsample_padding,
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 downsample_type=downsample_type,
+                convnext_channels_mult=convnext_channels_mult,
             )
             self.down_blocks.append(down_block)
 
@@ -215,6 +219,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 attention_head_dim=attention_head_dim if attention_head_dim is not None else output_channel,
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 upsample_type=upsample_type,
+                convnext_channels_mult=convnext_channels_mult,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel
