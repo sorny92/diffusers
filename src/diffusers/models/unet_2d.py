@@ -21,7 +21,7 @@ from ..configuration_utils import ConfigMixin, register_to_config
 from ..utils import BaseOutput
 from .embeddings import GaussianFourierProjection, TimestepEmbedding, Timesteps
 from .modeling_utils import ModelMixin
-from .unet_2d_blocks import UNetMidBlock2D, get_down_block, get_up_block
+from .unet_2d_blocks import UNetMidBlock2D, ConvnextMidBlock2D, get_down_block, get_up_block
 
 
 @dataclass
@@ -100,6 +100,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         up_block_types: Tuple[str] = ("AttnUpBlock2D", "AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D"),
         block_out_channels: Tuple[int] = (224, 448, 672, 896),
         layers_per_block: int = 2,
+        mid_block_type: str = "UNetMidBlock2D",
         mid_block_scale_factor: float = 1,
         downsample_padding: int = 1,
         downsample_type: str = "conv",
@@ -183,17 +184,33 @@ class UNet2DModel(ModelMixin, ConfigMixin):
             self.down_blocks.append(down_block)
 
         # mid
-        self.mid_block = UNetMidBlock2D(
-            in_channels=block_out_channels[-1],
-            temb_channels=time_embed_dim,
-            resnet_eps=norm_eps,
-            resnet_act_fn=act_fn,
-            output_scale_factor=mid_block_scale_factor,
-            resnet_time_scale_shift=resnet_time_scale_shift,
-            attention_head_dim=attention_head_dim if attention_head_dim is not None else block_out_channels[-1],
-            resnet_groups=norm_num_groups,
-            add_attention=add_attention,
-        )
+        if mid_block_type == "UNetMidBlock2D":
+            self.mid_block = UNetMidBlock2D(
+                in_channels=block_out_channels[-1],
+                temb_channels=time_embed_dim,
+                resnet_eps=norm_eps,
+                resnet_act_fn=act_fn,
+                output_scale_factor=mid_block_scale_factor,
+                resnet_time_scale_shift=resnet_time_scale_shift,
+                attention_head_dim=attention_head_dim if attention_head_dim is not None else block_out_channels[-1],
+                resnet_groups=norm_num_groups,
+                add_attention=add_attention,
+            )
+        elif mid_block_type == "ConvnextMidBlock2D":
+            self.mid_block = ConvnextMidBlock2D(
+                in_channels=block_out_channels[-1],
+                temb_channels=time_embed_dim,
+                resnet_eps=norm_eps,
+                resnet_act_fn=act_fn,
+                output_scale_factor=mid_block_scale_factor,
+                resnet_time_scale_shift=resnet_time_scale_shift,
+                attention_head_dim=attention_head_dim if attention_head_dim is not None else block_out_channels[-1],
+                resnet_groups=norm_num_groups,
+                add_attention=add_attention,
+                convnext_channels_mult=convnext_channels_mult,
+            )
+        else:
+            assert False
 
         # up
         reversed_block_out_channels = list(reversed(block_out_channels))

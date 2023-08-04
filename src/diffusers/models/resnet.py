@@ -693,7 +693,7 @@ class ConvnextBlock2D(nn.Module):
         down=False,
         conv_shortcut_bias: bool = True,
         conv_2d_out_channels: Optional[int] = None,
-        mid_channels_mult = 4,
+        mid_channels_mult=4,
     ):
         super().__init__()
         self.pre_norm = pre_norm

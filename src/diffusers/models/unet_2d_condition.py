@@ -149,6 +149,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             `only_cross_attention` is given as a single boolean and `mid_block_only_cross_attention` is `None`, the
             `only_cross_attention` value is used as the value for `mid_block_only_cross_attention`. Default to `False`
             otherwise.
+        convnext_channels_mult (`int`, *optional*, defaults to 4):
+            Dimension multiplier between output channels and middel channels in ConvNeXt blocks.
     """
 
     _supports_gradient_checkpointing = True
@@ -206,6 +208,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         mid_block_only_cross_attention: Optional[bool] = None,
         cross_attention_norm: Optional[str] = None,
         addition_embed_type_num_heads=64,
+        convnext_channels_mult=4,
     ):
         super().__init__()
 
@@ -454,6 +457,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 resnet_out_scale_factor=resnet_out_scale_factor,
                 cross_attention_norm=cross_attention_norm,
                 attention_head_dim=attention_head_dim[i] if attention_head_dim[i] is not None else output_channel,
+                convnext_channels_mult=convnext_channels_mult,
             )
             self.down_blocks.append(down_block)
 
@@ -543,6 +547,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                 resnet_out_scale_factor=resnet_out_scale_factor,
                 cross_attention_norm=cross_attention_norm,
                 attention_head_dim=attention_head_dim[i] if attention_head_dim[i] is not None else output_channel,
+                convnext_channels_mult=convnext_channels_mult,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel
