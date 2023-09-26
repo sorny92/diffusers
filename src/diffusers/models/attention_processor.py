@@ -482,8 +482,8 @@ class AttnProcessor:
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
 
-        query = attn.head_to_batch_dim(query)
-        key = attn.head_to_batch_dim(key)
+        query = attn.head_to_batch_dim(query) * (attn.scale ** 0.5)
+        key = attn.head_to_batch_dim(key) * (attn.scale ** 0.5)
         value = attn.head_to_batch_dim(value)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)

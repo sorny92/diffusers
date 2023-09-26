@@ -686,6 +686,7 @@ class ConvnextBlock2D(nn.Module):
         eps=1e-6,
         non_linearity="swish",
         time_embedding_norm="default",  # default, scale_shift, ada_group
+        time_embedding_activation=True,
         kernel=None,
         output_scale_factor=1.0,
         use_in_shortcut=None,
@@ -707,6 +708,7 @@ class ConvnextBlock2D(nn.Module):
         self.down = down
         self.output_scale_factor = output_scale_factor
         self.time_embedding_norm = time_embedding_norm
+        self.time_embedding_activation = time_embedding_activation
 
         if groups_out is None:
             groups_out = groups
@@ -788,7 +790,9 @@ class ConvnextBlock2D(nn.Module):
         hidden_states = self.conv1(hidden_states)
 
         if self.time_emb_proj is not None:
-            temb = self.time_emb_proj(self.nonlinearity(temb))[:, :, None, None]
+            if self.time_embedding_activation:
+                temb = self.nonlinearity(temb)
+            temb = self.time_emb_proj(temb)[:, :, None, None]
 
         if temb is not None and self.time_embedding_norm == "default":
             hidden_states = hidden_states + temb

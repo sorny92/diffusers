@@ -106,11 +106,13 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         downsample_type: str = "conv",
         upsample_type: str = "conv",
         act_fn: str = "silu",
+        mid_act_fn: Optional[str] = None,
         attention_head_dim: Optional[int] = 8,
         norm_num_groups: int = 32,
         norm_eps: float = 1e-5,
         resnet_time_scale_shift: str = "default",
         convnext_channels_mult=4,
+        convnext_time_embedding_activation=True,
         add_attention: bool = True,
         class_embed_type: Optional[str] = None,
         num_class_embeds: Optional[int] = None,
@@ -180,6 +182,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 downsample_type=downsample_type,
                 convnext_channels_mult=convnext_channels_mult,
+                convnext_time_embedding_activation=convnext_time_embedding_activation,
             )
             self.down_blocks.append(down_block)
 
@@ -189,7 +192,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 in_channels=block_out_channels[-1],
                 temb_channels=time_embed_dim,
                 resnet_eps=norm_eps,
-                resnet_act_fn=act_fn,
+                resnet_act_fn=mid_act_fn if mid_act_fn else act_fn,
                 output_scale_factor=mid_block_scale_factor,
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 attention_head_dim=attention_head_dim if attention_head_dim is not None else block_out_channels[-1],
@@ -201,13 +204,14 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 in_channels=block_out_channels[-1],
                 temb_channels=time_embed_dim,
                 resnet_eps=norm_eps,
-                resnet_act_fn=act_fn,
+                resnet_act_fn=mid_act_fn if mid_act_fn else act_fn,
                 output_scale_factor=mid_block_scale_factor,
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 attention_head_dim=attention_head_dim if attention_head_dim is not None else block_out_channels[-1],
                 resnet_groups=norm_num_groups,
                 add_attention=add_attention,
                 convnext_channels_mult=convnext_channels_mult,
+                time_embedding_activation=convnext_time_embedding_activation,
             )
         else:
             assert False
@@ -237,6 +241,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 resnet_time_scale_shift=resnet_time_scale_shift,
                 upsample_type=upsample_type,
                 convnext_channels_mult=convnext_channels_mult,
+                convnext_time_embedding_activation=convnext_time_embedding_activation,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel

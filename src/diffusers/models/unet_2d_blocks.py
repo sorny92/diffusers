@@ -54,6 +54,8 @@ def get_down_block(
     attention_head_dim=None,
     downsample_type=None,
     convnext_channels_mult=4,
+    convnext_time_embedding_activation=True,
+    attention_scale_qk=True,
 ):
     # If attn head dim is not defined, we default it to the number of heads
     if attention_head_dim is None:
@@ -103,6 +105,7 @@ def get_down_block(
             downsample_padding=downsample_padding,
             resnet_time_scale_shift=resnet_time_scale_shift,
             convnext_channels_mult=convnext_channels_mult,
+            time_embedding_activation=convnext_time_embedding_activation,
         )
     elif down_block_type == "ConvnextAttnDownBlock2D":
         return ConvnextAttnDownBlock2D(
@@ -118,6 +121,8 @@ def get_down_block(
             attention_head_dim=attention_head_dim,
             resnet_time_scale_shift=resnet_time_scale_shift,
             convnext_channels_mult=convnext_channels_mult,
+            time_embedding_activation=convnext_time_embedding_activation,
+            attention_scale_qk=attention_scale_qk,
         )
     elif down_block_type == "AttnDownBlock2D":
         if add_downsample is False:
@@ -279,6 +284,8 @@ def get_up_block(
     attention_head_dim=None,
     upsample_type=None,
     convnext_channels_mult=4,
+    convnext_time_embedding_activation=True,
+    attention_scale_qk=True,
 ):
     # If attn head dim is not defined, we default it to the number of heads
     if attention_head_dim is None:
@@ -329,6 +336,7 @@ def get_up_block(
             resnet_groups=resnet_groups,
             resnet_time_scale_shift=resnet_time_scale_shift,
             convnext_channels_mult=convnext_channels_mult,
+            time_embedding_activation=convnext_time_embedding_activation,
         )
     elif up_block_type == "ConvnextAttnUpBlock2D":
         return ConvnextAttnUpBlock2D(
@@ -344,6 +352,8 @@ def get_up_block(
             resnet_time_scale_shift=resnet_time_scale_shift,
             attention_head_dim=attention_head_dim,
             convnext_channels_mult=convnext_channels_mult,
+            time_embedding_activation=convnext_time_embedding_activation,
+            attention_scale_qk=attention_scale_qk,
         )
     elif up_block_type == "CrossAttnUpBlock2D":
         if cross_attention_dim is None:
@@ -590,6 +600,7 @@ class ConvnextMidBlock2D(nn.Module):
         attention_head_dim=1,
         output_scale_factor=1.0,
         convnext_channels_mult=4,
+        time_embedding_activation=True,
     ):
         super().__init__()
         resnet_groups = resnet_groups if resnet_groups is not None else min(in_channels // 4, 32)
@@ -609,6 +620,7 @@ class ConvnextMidBlock2D(nn.Module):
                 output_scale_factor=output_scale_factor,
                 pre_norm=resnet_pre_norm,
                 mid_channels_mult=convnext_channels_mult,
+                time_embedding_activation=time_embedding_activation,
             )
         ]
         attentions = []
@@ -652,6 +664,7 @@ class ConvnextMidBlock2D(nn.Module):
                     output_scale_factor=output_scale_factor,
                     pre_norm=resnet_pre_norm,
                     mid_channels_mult=convnext_channels_mult,
+                    time_embedding_activation=time_embedding_activation,
                 )
             )
 
@@ -1696,6 +1709,7 @@ class ConvnextDownBlock2D(nn.Module):
         add_downsample=True,
         downsample_padding=1,
         convnext_channels_mult=4,
+        time_embedding_activation=True,
     ):
         super().__init__()
         resnets = []
@@ -1715,6 +1729,7 @@ class ConvnextDownBlock2D(nn.Module):
                     output_scale_factor=output_scale_factor,
                     pre_norm=resnet_pre_norm,
                     mid_channels_mult=convnext_channels_mult,
+                    time_embedding_activation=time_embedding_activation,
                 )
             )
 
@@ -1774,10 +1789,12 @@ class ConvnextAttnDownBlock2D(nn.Module):
         resnet_groups: int = 32,
         resnet_pre_norm: bool = True,
         attention_head_dim=1,
+        attention_scale_qk=True,
         output_scale_factor=1.0,
         add_downsample=True,
         downsample_padding=1,
         convnext_channels_mult=4,
+        time_embedding_activation=True,
     ):
         super().__init__()
         resnets = []
@@ -1798,6 +1815,7 @@ class ConvnextAttnDownBlock2D(nn.Module):
                     output_scale_factor=output_scale_factor,
                     pre_norm=resnet_pre_norm,
                     mid_channels_mult=convnext_channels_mult,
+                    time_embedding_activation=time_embedding_activation,
                 )
             )
             attentions.append(
@@ -1805,6 +1823,7 @@ class ConvnextAttnDownBlock2D(nn.Module):
                     out_channels,
                     heads=out_channels // attention_head_dim,
                     dim_head=attention_head_dim,
+                    scale_qk=attention_scale_qk,
                     rescale_output_factor=output_scale_factor,
                     eps=resnet_eps,
                     norm_num_groups=resnet_groups,
@@ -3029,6 +3048,7 @@ class ConvnextUpBlock2D(nn.Module):
         output_scale_factor=1.0,
         add_upsample=True,
         convnext_channels_mult=4,
+        time_embedding_activation=True,
     ):
         super().__init__()
         resnets = []
@@ -3050,6 +3070,7 @@ class ConvnextUpBlock2D(nn.Module):
                     output_scale_factor=output_scale_factor,
                     pre_norm=resnet_pre_norm,
                     mid_channels_mult=convnext_channels_mult,
+                    time_embedding_activation=time_embedding_activation,
                 )
             )
 
@@ -3066,7 +3087,6 @@ class ConvnextUpBlock2D(nn.Module):
         for resnet in self.resnets:
             # pop res hidden states
             res_hidden_states = res_hidden_states_tuple[-1]
-            print(hidden_states.shape, res_hidden_states.shape)
             res_hidden_states_tuple = res_hidden_states_tuple[:-1]
             hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
 
@@ -3111,10 +3131,12 @@ class ConvnextAttnUpBlock2D(nn.Module):
         resnet_groups: int = 32,
         resnet_pre_norm: bool = True,
         attention_head_dim=1,
+        attention_scale_qk=True,
         output_scale_factor=1.0,
         add_upsample=True,
         convnext_channels_mult=4,
         upsample_type="conv",
+        time_embedding_activation=True,
     ):
         super().__init__()
         resnets = []
@@ -3145,6 +3167,7 @@ class ConvnextAttnUpBlock2D(nn.Module):
                     output_scale_factor=output_scale_factor,
                     pre_norm=resnet_pre_norm,
                     mid_channels_mult=convnext_channels_mult,
+                    time_embedding_activation=time_embedding_activation,
                 )
             )
             attentions.append(
@@ -3152,6 +3175,7 @@ class ConvnextAttnUpBlock2D(nn.Module):
                     out_channels,
                     heads=out_channels // attention_head_dim,
                     dim_head=attention_head_dim,
+                    scale_qk=attention_scale_qk,
                     rescale_output_factor=output_scale_factor,
                     eps=resnet_eps,
                     norm_num_groups=resnet_groups,
@@ -3194,7 +3218,6 @@ class ConvnextAttnUpBlock2D(nn.Module):
         for resnet, attn in zip(self.resnets, self.attentions):
             # pop res hidden states
             res_hidden_states = res_hidden_states_tuple[-1]
-            print(hidden_states.shape, res_hidden_states.shape)
             res_hidden_states_tuple = res_hidden_states_tuple[:-1]
             hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
 
