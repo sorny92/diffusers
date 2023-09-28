@@ -114,6 +114,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         convnext_channels_mult=4,
         convnext_time_embedding_activation=True,
         add_attention: bool = True,
+        wrong_heads: bool = False,
         class_embed_type: Optional[str] = None,
         num_class_embeds: Optional[int] = None,
     ):
@@ -183,6 +184,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 downsample_type=downsample_type,
                 convnext_channels_mult=convnext_channels_mult,
                 convnext_time_embedding_activation=convnext_time_embedding_activation,
+                wrong_heads=wrong_heads,
             )
             self.down_blocks.append(down_block)
 
@@ -212,6 +214,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 add_attention=add_attention,
                 convnext_channels_mult=convnext_channels_mult,
                 time_embedding_activation=convnext_time_embedding_activation,
+                wrong_heads=wrong_heads,
             )
         else:
             assert False
@@ -242,6 +245,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 upsample_type=upsample_type,
                 convnext_channels_mult=convnext_channels_mult,
                 convnext_time_embedding_activation=convnext_time_embedding_activation,
+                wrong_heads=wrong_heads,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel

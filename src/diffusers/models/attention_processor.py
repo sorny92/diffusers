@@ -69,6 +69,7 @@ class Attention(nn.Module):
         eps: float = 1e-5,
         rescale_output_factor: float = 1.0,
         residual_connection: bool = False,
+        wrong_heads: bool = False,
         _from_deprecated_attn_block=False,
         processor: Optional["AttnProcessor"] = None,
     ):
@@ -96,6 +97,9 @@ class Attention(nn.Module):
 
         self.added_kv_proj_dim = added_kv_proj_dim
         self.only_cross_attention = only_cross_attention
+
+        # reproduces a really idiotic bug in MatFusion where the heads and tokens got swapped
+        self.wrong_heads = wrong_heads
 
         if self.added_kv_proj_dim is None and self.only_cross_attention:
             raise ValueError(
@@ -327,21 +331,33 @@ class Attention(nn.Module):
             **cross_attention_kwargs,
         )
 
-    def batch_to_head_dim(self, tensor):
-        head_size = self.heads
-        batch_size, seq_len, dim = tensor.shape
-        tensor = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
+    def batch_to_head_dim(self, tensor, batch_size):
+        if self.wrong_heads:
+            if len(tensor.shape) == 3:
+                tensor = tensor.reshape(batch_size, -1, *tensor.shape[-2:])
+            batch_size, seq_len, head_size, dim = tensor.shape
+        else:
+            head_size = self.heads
+            _, seq_len, dim = tensor.shape
+            if len(tensor.shape) == 3:
+                tensor = tensor.reshape(batch_size, head_size, seq_len, dim)
+            tensor = tensor.permute(0, 2, 1, 3)
+        tensor = tensor.reshape(batch_size, seq_len, dim * head_size)
         return tensor
 
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
         batch_size, seq_len, dim = tensor.shape
         tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
-        tensor = tensor.permute(0, 2, 1, 3)
+
+        if self.wrong_heads:
+            head_batch, seq_len = seq_len, head_size
+        else:
+            head_batch = head_size
+            tensor = tensor.permute(0, 2, 1, 3)
 
         if out_dim == 3:
-            tensor = tensor.reshape(batch_size * head_size, seq_len, dim // head_size)
+            tensor = tensor.reshape(batch_size * head_batch, seq_len, dim // head_size)
 
         return tensor
 
@@ -482,13 +498,17 @@ class AttnProcessor:
         key = attn.to_k(encoder_hidden_states)
         value = attn.to_v(encoder_hidden_states)
 
-        query = attn.head_to_batch_dim(query) * (attn.scale ** 0.5)
-        key = attn.head_to_batch_dim(key) * (attn.scale ** 0.5)
+        query = attn.head_to_batch_dim(query)
+        key = attn.head_to_batch_dim(key)
         value = attn.head_to_batch_dim(value)
+
+        if attn.wrong_heads:
+            query = query * (attn.scale ** 0.5)
+            key = key * (attn.scale ** 0.5)
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
         hidden_states = torch.bmm(attention_probs, value)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -586,7 +606,7 @@ class LoRAAttnProcessor(nn.Module):
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
         hidden_states = torch.bmm(attention_probs, value)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states) + scale * self.to_out_lora(hidden_states)
@@ -686,7 +706,7 @@ class CustomDiffusionAttnProcessor(nn.Module):
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
         hidden_states = torch.bmm(attention_probs, value)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         if self.train_q_out:
             # linear proj
@@ -743,7 +763,7 @@ class AttnAddedKVProcessor:
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
         hidden_states = torch.bmm(attention_probs, value)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -887,7 +907,7 @@ class LoRAAttnAddedKVProcessor(nn.Module):
 
         attention_probs = attn.get_attention_scores(query, key, attention_mask)
         hidden_states = torch.bmm(attention_probs, value)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states) + scale * self.to_out_lora(hidden_states)
@@ -952,7 +972,7 @@ class XFormersAttnAddedKVProcessor:
             query, key, value, attn_bias=attention_mask, op=self.attention_op, scale=attn.scale
         )
         hidden_states = hidden_states.to(query.dtype)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -1035,7 +1055,7 @@ class XFormersAttnProcessor:
             query, key, value, attn_bias=attention_mask, op=self.attention_op, scale=attn.scale
         )
         hidden_states = hidden_states.to(query.dtype)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -1107,10 +1127,18 @@ class AttnProcessor2_0:
         inner_dim = key.shape[-1]
         head_dim = inner_dim // attn.heads
 
-        query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+        if attn.wrong_heads:
+            query = query.view(batch_size, -1, attn.heads, head_dim)
+            key = key.view(batch_size, -1, attn.heads, head_dim)
+            value = value.view(batch_size, -1, attn.heads, head_dim)
+            query = query * (attn.scale ** 0.5)
+            key = key * (attn.scale ** 0.5)
+        else:
+            query = query.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-        key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+            key = key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+            value = value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+
 
         # the output of sdp = (batch, num_heads, seq_len, head_dim)
         # TODO: add support for attn.scale when we move to Torch 2.1
@@ -1118,7 +1146,10 @@ class AttnProcessor2_0:
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
 
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+        if attn.wrong_heads:
+            hidden_states = hidden_states.reshape(batch_size, -1, attn.heads * head_dim)
+        else:
+            hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         hidden_states = hidden_states.to(query.dtype)
 
         # linear proj
@@ -1233,7 +1264,7 @@ class LoRAXFormersAttnProcessor(nn.Module):
         hidden_states = xformers.ops.memory_efficient_attention(
             query, key, value, attn_bias=attention_mask, op=self.attention_op, scale=attn.scale
         )
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states) + scale * self.to_out_lora(hidden_states)
@@ -1451,7 +1482,7 @@ class CustomDiffusionXFormersAttnProcessor(nn.Module):
             query, key, value, attn_bias=attention_mask, op=self.attention_op, scale=attn.scale
         )
         hidden_states = hidden_states.to(query.dtype)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         if self.train_q_out:
             # linear proj
@@ -1529,7 +1560,7 @@ class SlicedAttnProcessor:
 
             hidden_states[start_idx:end_idx] = attn_slice
 
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
@@ -1619,7 +1650,7 @@ class SlicedAttnAddedKVProcessor:
 
             hidden_states[start_idx:end_idx] = attn_slice
 
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states, batch_size)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)

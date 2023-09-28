@@ -56,6 +56,7 @@ def get_down_block(
     convnext_channels_mult=4,
     convnext_time_embedding_activation=True,
     attention_scale_qk=True,
+    wrong_heads=False,
 ):
     # If attn head dim is not defined, we default it to the number of heads
     if attention_head_dim is None:
@@ -123,6 +124,7 @@ def get_down_block(
             convnext_channels_mult=convnext_channels_mult,
             time_embedding_activation=convnext_time_embedding_activation,
             attention_scale_qk=attention_scale_qk,
+            wrong_heads=wrong_heads,
         )
     elif down_block_type == "AttnDownBlock2D":
         if add_downsample is False:
@@ -286,6 +288,7 @@ def get_up_block(
     convnext_channels_mult=4,
     convnext_time_embedding_activation=True,
     attention_scale_qk=True,
+    wrong_heads=False,
 ):
     # If attn head dim is not defined, we default it to the number of heads
     if attention_head_dim is None:
@@ -354,6 +357,7 @@ def get_up_block(
             convnext_channels_mult=convnext_channels_mult,
             time_embedding_activation=convnext_time_embedding_activation,
             attention_scale_qk=attention_scale_qk,
+            wrong_heads=wrong_heads,
         )
     elif up_block_type == "CrossAttnUpBlock2D":
         if cross_attention_dim is None:
@@ -597,6 +601,7 @@ class ConvnextMidBlock2D(nn.Module):
         resnet_groups: int = 32,
         resnet_pre_norm: bool = True,
         add_attention: bool = True,
+        wrong_heads: bool = False,
         attention_head_dim=1,
         output_scale_factor=1.0,
         convnext_channels_mult=4,
@@ -645,6 +650,7 @@ class ConvnextMidBlock2D(nn.Module):
                         residual_connection=True,
                         bias=True,
                         upcast_softmax=True,
+                        wrong_heads=wrong_heads,
                         _from_deprecated_attn_block=True,
                     )
                 )
@@ -1790,6 +1796,7 @@ class ConvnextAttnDownBlock2D(nn.Module):
         resnet_pre_norm: bool = True,
         attention_head_dim=1,
         attention_scale_qk=True,
+        wrong_heads=False,
         output_scale_factor=1.0,
         add_downsample=True,
         downsample_padding=1,
@@ -1830,6 +1837,7 @@ class ConvnextAttnDownBlock2D(nn.Module):
                     residual_connection=True,
                     bias=True,
                     upcast_softmax=True,
+                    wrong_heads=wrong_heads,
                     _from_deprecated_attn_block=True,
                 )
             )
@@ -3132,6 +3140,7 @@ class ConvnextAttnUpBlock2D(nn.Module):
         resnet_pre_norm: bool = True,
         attention_head_dim=1,
         attention_scale_qk=True,
+        wrong_heads=False,
         output_scale_factor=1.0,
         add_upsample=True,
         convnext_channels_mult=4,
@@ -3182,6 +3191,7 @@ class ConvnextAttnUpBlock2D(nn.Module):
                     residual_connection=True,
                     bias=True,
                     upcast_softmax=True,
+                    wrong_heads=wrong_heads,
                     _from_deprecated_attn_block=True,
                 )
             )
